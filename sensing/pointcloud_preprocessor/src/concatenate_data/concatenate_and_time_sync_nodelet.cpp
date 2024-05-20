@@ -492,18 +492,34 @@ void PointCloudConcatenateDataSynchronizerComponent::convertToXYZICloud(
 {
   output_ptr->header = input_ptr->header;
 
-  PointCloud2Modifier<PointXYZI> output_modifier{*output_ptr, input_ptr->header.frame_id};
-  output_modifier.reserve(input_ptr->width);
-
   bool has_intensity = std::any_of(
     input_ptr->fields.begin(), input_ptr->fields.end(),
     [](auto & field) { return field.name == "intensity"; });
+  bool has_entity_id = std::any_of(
+    input_ptr->fields.begin(), input_ptr->fields.end(),
+    [](auto & field) { return field.name == "entity_id"; });
 
   sensor_msgs::PointCloud2Iterator<float> it_x(*input_ptr, "x");
   sensor_msgs::PointCloud2Iterator<float> it_y(*input_ptr, "y");
   sensor_msgs::PointCloud2Iterator<float> it_z(*input_ptr, "z");
 
-  if (has_intensity) {
+  if (has_entity_id && has_intensity) {
+    sensor_msgs::PointCloud2Iterator<float> it_i(*input_ptr, "intensity");
+    sensor_msgs::PointCloud2Iterator<int32_t> it_e(*input_ptr, "entity_id");
+    PointCloud2Modifier<PointXYZIE> output_modifier{*output_ptr, input_ptr->header.frame_id};
+    output_modifier.reserve(input_ptr->width);
+    for (; it_x != it_x.end(); ++it_x, ++it_y, ++it_z, ++it_i, ++it_e) {
+      PointXYZIE point;
+      point.x = *it_x;
+      point.y = *it_y;
+      point.z = *it_z;
+      point.intensity = *it_i;
+      point.entity_id = *it_e;
+      output_modifier.push_back(std::move(point));
+    }
+  } else if (has_intensity) {
+    PointCloud2Modifier<PointXYZI> output_modifier{*output_ptr, input_ptr->header.frame_id};
+    output_modifier.reserve(input_ptr->width);
     sensor_msgs::PointCloud2Iterator<float> it_i(*input_ptr, "intensity");
     for (; it_x != it_x.end(); ++it_x, ++it_y, ++it_z, ++it_i) {
       PointXYZI point;
@@ -513,7 +529,23 @@ void PointCloudConcatenateDataSynchronizerComponent::convertToXYZICloud(
       point.intensity = *it_i;
       output_modifier.push_back(std::move(point));
     }
+  } else if (has_entity_id) {
+    // pointXYZIが基本なのでIは残しとく
+    PointCloud2Modifier<PointXYZIE> output_modifier{*output_ptr, input_ptr->header.frame_id};
+    output_modifier.reserve(input_ptr->width);
+    sensor_msgs::PointCloud2Iterator<int32_t> it_e(*input_ptr, "entity_id");
+    for (; it_x != it_x.end(); ++it_x, ++it_y, ++it_z, ++it_e) {
+      PointXYZIE point;
+      point.x = *it_x;
+      point.y = *it_y;
+      point.z = *it_z;
+      point.intensity = 0.0f;
+      point.entity_id = *it_e;
+      output_modifier.push_back(std::move(point));
+    }
   } else {
+    PointCloud2Modifier<PointXYZI> output_modifier{*output_ptr, input_ptr->header.frame_id};
+    output_modifier.reserve(input_ptr->width);
     for (; it_x != it_x.end(); ++it_x, ++it_y, ++it_z) {
       PointXYZI point;
       point.x = *it_x;
